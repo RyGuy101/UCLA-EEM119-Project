@@ -11,7 +11,7 @@ client = None
 
 def receivedImu(data):
     client.send(data)
-    print(data)
+    # print(data)
 
 def readBle():
     global client

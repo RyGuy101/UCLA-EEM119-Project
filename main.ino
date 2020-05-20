@@ -1,12 +1,13 @@
 #include <Arduino_LSM9DS1.h>
 #include <ArduinoBLE.h>
-#include "orientation.h"
+#include "MadgwickAHRS.h" // Library from https://github.com/arduino-libraries/MadgwickAHRS/
 
-#define PI_OVER_180 0.01745329251f
+// TODO: When button is pushed, reset yaw to 0 (or send it in a separate characteristic)
 
 unsigned long lastTime;
-unsigned long currentTime;
+unsigned long samplePeriod = 1000000/sampleFreqDef;
 float q[4] = {1, 0, 0, 0};
+Madgwick madgwick;
 
 const int messageSize = sizeof(float) * 4;
 uint8_t message[messageSize];
@@ -25,7 +26,7 @@ void setup() {
     BLE.advertise();
 
     IMU.begin();
-    currentTime = micros();
+    lastTime = micros();
 }
 
 void loop() {
@@ -33,17 +34,17 @@ void loop() {
         central = BLE.central();
     }
 
-    if (IMU.gyroscopeAvailable()) {
-        float ax, ay, az, gx, gy, gz, mx, my, mz;
+    if (micros() - lastTime >= samplePeriod) {
+        lastTime += samplePeriod;
+        float ax, ay, az, gx, gy, gz/*, mx, my, mz*/;
         IMU.readAcceleration(ax, ay, az);
-        IMU.readMagneticField(mx, my, mz);
+        // IMU.readMagneticField(mx, my, mz);
         IMU.readGyroscope(gx, gy, gz);
-        gx *= PI_OVER_180;
-        gy *= PI_OVER_180;
-        gz *= PI_OVER_180;
-        currentTime = micros();
-        MadgwickQuaternionUpdate(ax, ay, az, gx, gy, gz, mx, my, mz, q, (currentTime - lastTime) / 1000000.0f);
-        lastTime = currentTime;
+        madgwick.updateIMU(-gx, -gy, -gz, ax, ay, az);
+        q[0] = madgwick.q0;
+        q[1] = madgwick.q1;
+        q[2] = madgwick.q2;
+        q[3] = madgwick.q3;
         memcpy(message, q, messageSize);
         imuCharacteristic.writeValue(message, messageSize);
     }

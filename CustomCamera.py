@@ -72,8 +72,8 @@ def saveQuatReference(deviceQuat):
 
 def getBasisMatrix():
     cameraNormalizedVec, upVec = getCameraVectors()
-    basis_x = cameraNormalizedVec # Vector from target to eye is set to the positive x direction, but this could change.
-    basis_z = upVec
+    basis_x = cameraNormalizedVec # These axes should agree with how the Arduino axes are arranged
+    basis_z = -upVec
     basis_y = np.cross(basis_z, basis_x)
     return np.column_stack((basis_x, basis_y, basis_z))
 
@@ -175,7 +175,7 @@ def run(context):
                     except:
                         break
                 q = Quaternion(np.array(struct.unpack('4f', data)))
-                print(q)
+                # print(q)
 
                 if not control:
                     saveQuatReference(q)
