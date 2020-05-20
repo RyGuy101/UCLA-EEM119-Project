@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "name": "Mac",
+            "includePath": [
+                "~/Library/Arduino15/packages/arduino/tools/**",
+                "~/Library/Arduino15/packages/arduino/hardware/mbed/1.1.4/**",
+                "~/Documents/Arduino/libraries/**"
+            ],
+            "forcedInclude": [
+                "~/Library/Arduino15/packages/arduino/hardware/mbed/1.1.4/cores/arduino/Arduino.h"
+            ],
+            "macFrameworkPath": [
+                "/System/Library/Frameworks",
+                "/Library/Frameworks"
+            ],
+            "intelliSenseMode": "clang-x64",
+            "compilerPath": "/usr/bin/clang",
+            "cStandard": "c11",
+            "cppStandard": "c++17"
+        }
+    ],
+    "version": 4
+}
