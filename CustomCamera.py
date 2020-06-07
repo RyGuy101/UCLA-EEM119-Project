@@ -3,22 +3,16 @@ import time
 import uuid
 import struct
 import socket
+import math
 
 # Run this command in a terminal to see where your python packages are stored:
 # python -c "exec(\"import sys\nfor p in sys.path:\n  if 'site-packages' in p:\n    print(p)\")"
 import sys
 package_path = "/Users/ryannemiroff/miniconda3/lib/python3.7/site-packages"
-sys.path.insert(0, package_path + "/Adafruit_BluefruitLE-0.9.10-py3.7.egg")
 sys.path.insert(0, package_path)
 
 # pip install pyquaternion
 # pip install pyobjc # For MacOS
-
-# git clone https://github.com/adafruit/Adafruit_Python_BluefruitLE.git
-# cd Adafruit_Python_BluefruitLE
-# python setup.py install
-# cd ..
-# rm -rf Adafruit_Python_BluefruitLE 
 
 from pyquaternion import Quaternion
 import numpy as np
@@ -33,6 +27,7 @@ refEyePos = None
 refDeviceQuat = None
 refCameraNormalizedVec = None
 refCamUpVec = None
+refYaw = 0
 
 
 def savePosReference():
@@ -50,7 +45,7 @@ def getCameraVectors():
 
     upVector = view.camera.upVector
     # stolen plane projection code:
-    u = np.array([upVector.x, upVector.y, upVector.z])        
+    u = np.array((upVector.x, upVector.y, upVector.z))        
     n = cameraNormalizedVec
     proj_of_u_on_n = (np.dot(u, n))*n
     upVec = u - proj_of_u_on_n
@@ -72,8 +67,15 @@ def saveQuatReference(deviceQuat):
 
 def getBasisMatrix():
     cameraNormalizedVec, upVec = getCameraVectors()
-    basis_x = cameraNormalizedVec # These axes should agree with how the Arduino axes are arranged
-    basis_z = -upVec
+    temp_basis_x = cameraNormalizedVec # These axes should agree with how the Arduino axes are arranged
+    temp_basis_z = -upVec
+    temp_basis_y = np.cross(temp_basis_z, temp_basis_x)
+    temp_basis = np.column_stack((temp_basis_x, temp_basis_y, temp_basis_z))
+
+    # effectively pretend each rotation starts at 0 yaw to alleviate the effects of yaw drift
+    basis_x_in_temp_basis = np.array((math.cos(-refYaw), math.sin(-refYaw), 0.0))
+    basis_x = np.dot(temp_basis, basis_x_in_temp_basis)
+    basis_z = temp_basis_z
     basis_y = np.cross(basis_z, basis_x)
     return np.column_stack((basis_x, basis_y, basis_z))
 
@@ -142,8 +144,31 @@ def updateScreen():
     view.refresh()
 
 
+def connectToSocket(port):
+    sock = socket.socket()
+    sock.connect(("localhost", port))
+    sock.setblocking(False)
+    return sock
+
+
+def getLatestData(socket, dataSize):
+    try:
+        data = socket.recv(dataSize)
+        # print(data)
+        # get most recent data
+        while True:
+            try:
+                data = socket.recv(dataSize)
+            except:
+                break
+        return data
+    except:
+        return None
+
+
 def run(context):
     global view
+    global refYaw
 
     ui = None
     try:
@@ -152,9 +177,8 @@ def run(context):
         view = app.activeViewport
 
         print("connecting to socket...")
-        sock = socket.socket()
-        sock.connect(("localhost", 5000))
-        sock.setblocking(False)
+        startRotateSock = connectToSocket(5001)
+        rotateSock = connectToSocket(5000)
         print("connected")
 
         # TODO could use this to rotate around component center (would also have to rotate target):
@@ -162,31 +186,27 @@ def run(context):
         # comp = design.activeComponent
         # com = comp.getPhysicalProperties().centerOfMass
 
-        control = False
-        dataSize = 4*4; # quaternion is made of 4 floats
+        quaternionDataSize = 4*4; # quaternion is made of 4 floats
+        startRotateDataSize = quaternionDataSize + 4 # quaternion plus yaw float value
 
         while True:
-            try:
-                data = sock.recv(dataSize)
-                # get most recent data
-                while True:
-                    try:
-                        data = sock.recv(dataSize)
-                    except:
-                        break
-                q = Quaternion(np.array(struct.unpack('4f', data)))
+            startRotateData = getLatestData(startRotateSock, startRotateDataSize)
+            quatData = None
+            if not startRotateData is None:
+                q = Quaternion(np.array(struct.unpack('4f', startRotateData[:quaternionDataSize])))
+                saveQuatReference(q)
+                refYaw = struct.unpack('1f', startRotateData[quaternionDataSize:])[0]
+            else:
+                quatData = getLatestData(rotateSock, quaternionDataSize)
+            if not quatData is None and not refDeviceQuat is None:
+                q = Quaternion(np.array(struct.unpack('4f', quatData)))
                 # print(q)
-
-                if not control:
-                    saveQuatReference(q)
-                    control = True
-                else:
-                    rotate(q, getBasisMatrix())
-                    updateScreen()
-            except:
+                rotate(q, getBasisMatrix())
+                updateScreen()
+            else:
                 adsk.doEvents()
                 try:
-                    sock.send(b'a') # dummy message to check if server is alive
+                    startRotateSock.send(b'a') # dummy message to check if server is alive
                 except:
                     break
 
