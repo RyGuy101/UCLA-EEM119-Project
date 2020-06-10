@@ -12,11 +12,13 @@ import Adafruit_BluefruitLE
 BLE_SERVICE_UUID       = uuid.UUID('0f958eb9-b8bb-40e3-91b1-54281cabe755')
 ROTATE_CHAR_UUID       = uuid.UUID('06d66869-9fc1-4141-970d-dd5f6088723a')
 START_ROTATE_CHAR_UUID = uuid.UUID('d9acf2e8-0f26-4707-94eb-091afc18e952')
+VELOCITY_CHAR          = uuid.UUID('4c3a0eec-d518-4e1e-a8c3-664111eb4d47')
 
 ble = Adafruit_BluefruitLE.get_provider()
 
 startRotateClient = None
 rotateClient = None
+velocityClient = None
 
 def startRotation(data):
     if startRotateClient:
@@ -29,6 +31,11 @@ def receivedRotation(data):
         rotateClient.send(data)
     # print(data)
 
+def receivedVelocity(data):
+    if velocityClient:
+        velocityClient.send(data)
+    # print(data)
+
 def makeSocket(port):
     sock = socket.socket()
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -39,6 +46,7 @@ def makeSocket(port):
 def readBle():
     global startRotateClient
     global rotateClient
+    global velocityClient
 
     ble.clear_cached_data()
     adapter = ble.get_default_adapter()
@@ -65,16 +73,20 @@ def readBle():
         bleService = device.find_service(BLE_SERVICE_UUID)
         rotationChar = bleService.find_characteristic(ROTATE_CHAR_UUID)
         startRotateChar = bleService.find_characteristic(START_ROTATE_CHAR_UUID)
+        velocityChar = bleService.find_characteristic(VELOCITY_CHAR)
 
         print('Subscribing to characteristic changes...')
         startRotateChar.start_notify(startRotation)
         rotationChar.start_notify(receivedRotation)
+        velocityChar.start_notify(receivedVelocity)
 
         print("Waiting for Fusion 360 client...")
         startRotateSock = makeSocket(5001)
         rotateSock = makeSocket(5000)
+        velocitySock = makeSocket(5002)
         startRotateClient, address = startRotateSock.accept()
         rotateClient, address = rotateSock.accept()
+        velocityClient, address = velocitySock.accept()
         print("Socket client connected")
 
         while True:

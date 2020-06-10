@@ -17,18 +17,18 @@ sys.path.insert(0, package_path)
 from pyquaternion import Quaternion
 import numpy as np
 
-TRANSLATION_SCALE = 0.000005
+TRANSLATION_SCALE = 0.2
+VELOCITY_THRESHOLD = 0.2 * TRANSLATION_SCALE # 0.2 radian threshold for tilt controls
 
 view = None
 
 refTargetPos = None
 refEyePos = None
+lastDisplacementTime = None
 
 refDeviceQuat = None
 refCameraNormalizedVec = None
 refCamUpVec = None
-refYaw = 0
-
 
 def savePosReference():
     global refTargetPos
@@ -65,7 +65,7 @@ def saveQuatReference(deviceQuat):
     refCamUpVec = refCameraNormalizedVec + refUpVec
 
 
-def getBasisMatrix():
+def getBasisMatrix(refDeviceYaw):
     cameraNormalizedVec, upVec = getCameraVectors()
     temp_basis_x = cameraNormalizedVec # These axes should agree with how the Arduino axes are arranged
     temp_basis_z = -upVec
@@ -73,7 +73,7 @@ def getBasisMatrix():
     temp_basis = np.column_stack((temp_basis_x, temp_basis_y, temp_basis_z))
 
     # effectively pretend each rotation starts at 0 yaw to alleviate the effects of yaw drift
-    basis_x_in_temp_basis = np.array((math.cos(-refYaw), math.sin(-refYaw), 0.0))
+    basis_x_in_temp_basis = np.array((math.cos(-refDeviceYaw), math.sin(-refDeviceYaw), 0.0))
     basis_x = np.dot(temp_basis, basis_x_in_temp_basis)
     basis_z = temp_basis_z
     basis_y = np.cross(basis_z, basis_x)
@@ -88,9 +88,9 @@ def translate(deviceDisplacement, basis):
 
     r = camera.target.distanceTo(camera.eye)
 
-    deviceDisplacement = np.array(deviceDisplacement)
+    # deviceDisplacement = np.array(deviceDisplacement)
     deviceDisplacement[0] = 0 # ignore x direction (perpendicular to computer screen)
-    deviceDisplacement *= r * TRANSLATION_SCALE
+    deviceDisplacement *= r
 
     eye = np.linalg.solve(basis, np.array((camera.eye.x, camera.eye.y, camera.eye.z)))
     target = np.linalg.solve(basis, np.array((camera.target.x, camera.target.y, camera.target.z)))
@@ -103,6 +103,26 @@ def translate(deviceDisplacement, basis):
 
     camera.isSmoothTransition = False
     view.camera = camera
+
+
+def velocityToDisplacement(vh, vv):
+    global lastDisplacementTime
+    savePosReference()
+    disp = np.array((0.0, 0.0, 0.0))
+    if not lastDisplacementTime is None:
+        dt = time.time() - lastDisplacementTime
+        disp[1] = vh
+        disp[2] = vv
+        disp *= TRANSLATION_SCALE
+        isMoving = np.abs(disp) > VELOCITY_THRESHOLD
+        for i in range(len(disp)):
+            if isMoving[i]:
+                disp[i] -= VELOCITY_THRESHOLD * np.sign(disp[i])
+            else:
+                disp[i] = 0
+        disp *= dt
+    lastDisplacementTime = time.time()
+    return disp
 
 
 def rotate(deviceQuat, basis):
@@ -168,7 +188,7 @@ def getLatestData(socket, dataSize):
 
 def run(context):
     global view
-    global refYaw
+    global lastDisplacementTime
 
     ui = None
     try:
@@ -179,6 +199,7 @@ def run(context):
         print("connecting to socket...")
         startRotateSock = connectToSocket(5001)
         rotateSock = connectToSocket(5000)
+        velocitySock = connectToSocket(5002)
         print("connected")
 
         # TODO could use this to rotate around component center (would also have to rotate target):
@@ -188,10 +209,16 @@ def run(context):
 
         quaternionDataSize = 4*4; # quaternion is made of 4 floats
         startRotateDataSize = quaternionDataSize + 4 # quaternion plus yaw float value
+        velocityDataSize = 4*2 # two floats (horizontal and vertical)
+
+        refYaw = 0
+        rawVh = 0
+        rawVv = 0
 
         while True:
             startRotateData = getLatestData(startRotateSock, startRotateDataSize)
             quatData = None
+            velocityData = None
             if not startRotateData is None:
                 q = Quaternion(np.array(struct.unpack('4f', startRotateData[:quaternionDataSize])))
                 saveQuatReference(q)
@@ -199,10 +226,24 @@ def run(context):
             else:
                 quatData = getLatestData(rotateSock, quaternionDataSize)
             if not quatData is None and not refDeviceQuat is None:
+                lastDisplacementTime = None
                 q = Quaternion(np.array(struct.unpack('4f', quatData)))
                 # print(q)
-                rotate(q, getBasisMatrix())
+                rotate(q, getBasisMatrix(refYaw))
                 updateScreen()
+            else:
+                velocityData = getLatestData(velocitySock, velocityDataSize)
+            if not velocityData is None:
+                velocity = struct.unpack('2f', velocityData)
+                rawVh = velocity[0]
+                rawVv = velocity[1]
+                print(rawVv)
+                if rawVh == 0.0 and rawVv == 0.0:
+                    lastDisplacementTime = None
+                else:
+                    disp = velocityToDisplacement(rawVh, rawVv)
+                    translate(disp, getBasisMatrix(0))
+                    updateScreen()
             else:
                 adsk.doEvents()
                 try:

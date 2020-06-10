@@ -3,41 +3,61 @@
 #include "MadgwickAHRS.h" // Library from https://github.com/arduino-libraries/MadgwickAHRS/
 
 #define ROTATE_BUTTON 8 // digital pin number
+#define TRANSLATE_BUTTON 2 // digital pin number
 
 bool setupOkay = true;
 
 Madgwick madgwick;
-float q[4] = {1, 0, 0, 0};
 volatile bool rotating = false;
 volatile bool initiatedRotation = false;
+volatile bool translating = false;
+volatile bool endedTranslate = false;
+
+float q[4];
+float vel[2]; // for now, roll and pitch
+const float stopped[] = {0, 0};
 
 const size_t quaternionMessageSize = sizeof(float) * 4;
 uint8_t quaternionMessage[quaternionMessageSize];
 const size_t startRotateMessageSize = quaternionMessageSize + sizeof(float);
 uint8_t startRotateMessage[startRotateMessageSize];
+const size_t velocityMessageSize = sizeof(float) * 2;
+uint8_t velocityMessage[velocityMessageSize];
 
 BLEService bleService("0f958eb9-b8bb-40e3-91b1-54281cabe755"); // https://www.uuidgenerator.net/
 BLECharacteristic rotateChar("06d66869-9fc1-4141-970d-dd5f6088723a", BLERead | BLENotify, quaternionMessageSize);
 BLECharacteristic startRotateChar("d9acf2e8-0f26-4707-94eb-091afc18e952", BLERead | BLEIndicate, startRotateMessageSize);
+BLECharacteristic velocityChar("4c3a0eec-d518-4e1e-a8c3-664111eb4d47", BLERead | BLENotify, velocityMessageSize);
+
 BLEDevice central;
 
-void rotateButtonChange() {
-  rotating = !rotating;
-  initiatedRotation = false;
-}
+// void rotateButtonChange() {
+//   rotating = !rotating;
+//   initiatedRotation = false;
+// }
+
+// void translateButtonChange() {
+//   translating = !translating;
+//   endedTranslate = false;
+// }
 
 void setup() {
     Serial.begin(115200);
 
     pinMode(ROTATE_BUTTON, INPUT_PULLUP);
-    rotating = !digitalRead(ROTATE_BUTTON);
-    attachInterrupt(digitalPinToInterrupt(ROTATE_BUTTON), rotateButtonChange, CHANGE);
+    // rotating = !digitalRead(ROTATE_BUTTON);
+    // attachInterrupt(digitalPinToInterrupt(ROTATE_BUTTON), rotateButtonChange, CHANGE);
+
+    pinMode(TRANSLATE_BUTTON, INPUT_PULLUP);
+    // translating = !digitalRead(TRANSLATE_BUTTON);
+    // attachInterrupt(digitalPinToInterrupt(TRANSLATE_BUTTON), translateButtonChange, CHANGE);
     
     BLE.begin();
     BLE.setLocalName("RyansArduino");
     BLE.setAdvertisedService(bleService);
     bleService.addCharacteristic(rotateChar);
     bleService.addCharacteristic(startRotateChar);
+    bleService.addCharacteristic(velocityChar);
     BLE.addService(bleService);
     BLE.advertise();
 
@@ -57,6 +77,15 @@ void loop() {
 
     if (!central.connected()) {
         central = BLE.central();
+    }
+
+    if (!digitalRead(ROTATE_BUTTON) != rotating) {
+        rotating = !rotating;
+        initiatedRotation = false;
+    }
+    if (!digitalRead(TRANSLATE_BUTTON) != translating) {
+        translating = !translating;
+        endedTranslate = false;
     }
 
     if (IMU.accelerationAvailable() && IMU.gyroscopeAvailable()) {
@@ -83,6 +112,20 @@ void loop() {
                 memcpy(quaternionMessage, q, quaternionMessageSize);
                 rotateChar.writeValue(quaternionMessage, quaternionMessageSize);
             }
+        } else if (translating) {
+            vel[0] = madgwick.getRollRadians();
+            vel[1] = madgwick.getPitchRadians();
+            vel[0] -= 3.14159265f; // Arduino is upside down
+            if (vel[0] < -3.14159265f) {
+                vel[0] += 2*3.14159265f;
+            }
+            vel[1] += 0.349; // wrist angle is naturally around 20(?) degress - use this as the zero position
+            memcpy(velocityMessage, vel, velocityMessageSize);
+            velocityChar.writeValue(velocityMessage, velocityMessageSize);
+        } else if (!endedTranslate) {
+            memcpy(velocityMessage, stopped, velocityMessageSize);
+            velocityChar.writeValue(velocityMessage, velocityMessageSize);
+            endedTranslate = true;
         }
     }
 }
