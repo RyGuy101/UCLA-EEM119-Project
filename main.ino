@@ -53,7 +53,7 @@ void setup() {
     // attachInterrupt(digitalPinToInterrupt(TRANSLATE_BUTTON), translateButtonChange, CHANGE);
     
     BLE.begin();
-    BLE.setLocalName("RyansArduino");
+    BLE.setLocalName("Arduino");
     BLE.setAdvertisedService(bleService);
     bleService.addCharacteristic(rotateChar);
     bleService.addCharacteristic(startRotateChar);

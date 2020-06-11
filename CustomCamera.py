@@ -200,6 +200,7 @@ def run(context):
         startRotateSock = connectToSocket(5001)
         rotateSock = connectToSocket(5000)
         velocitySock = connectToSocket(5002)
+        # doublePressSock = connectToSocket(5003)
         print("connected")
 
         # TODO could use this to rotate around component center (would also have to rotate target):
@@ -219,6 +220,7 @@ def run(context):
             startRotateData = getLatestData(startRotateSock, startRotateDataSize)
             quatData = None
             velocityData = None
+            # doublePressData = None
             if not startRotateData is None:
                 q = Quaternion(np.array(struct.unpack('4f', startRotateData[:quaternionDataSize])))
                 saveQuatReference(q)
@@ -237,7 +239,7 @@ def run(context):
                 velocity = struct.unpack('2f', velocityData)
                 rawVh = velocity[0]
                 rawVv = velocity[1]
-                print(rawVv)
+                # print(rawVv)
                 if rawVh == 0.0 and rawVv == 0.0:
                     lastDisplacementTime = None
                 else:
@@ -245,10 +247,20 @@ def run(context):
                     translate(disp, getBasisMatrix(0))
                     updateScreen()
             else:
+            #     doublePressData = getLatestData(doublePressSock, 1)
+            # if not doublePressData is None:
+            #     camera = view.camera
+            #     camera.viewOrientation = adsk.core.ViewOrientations.IsoTopRightViewOrientation
+            #     camera.isFitView = True
+            #     camera.isSmoothTransition = True
+            #     view.camera = camera
+            #     updateScreen()
+            # else:
                 adsk.doEvents()
                 try:
                     startRotateSock.send(b'a') # dummy message to check if server is alive
                 except:
+                    print("Lost connection with BLE process. Stopping...")
                     break
 
         # Test code
