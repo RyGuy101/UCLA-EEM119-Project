@@ -23,8 +23,8 @@ const size_t startRotateMessageSize = quaternionMessageSize + sizeof(float);
 uint8_t startRotateMessage[startRotateMessageSize];
 const size_t velocityMessageSize = sizeof(float) * 2;
 uint8_t velocityMessage[velocityMessageSize];
-const size_t doubleClickMessageSize = sizeof(float) * 2;
-uint8_t doubleClickMessage[doubleClickMessageSize];
+const size_t dummyMessageSize = 1;
+uint8_t dummyMessage[dummyMessageSize] = {1};
 
 unsigned long startTime = 0;
 const int doubleClickThresh = 600; // limit of 600 ms to wait for 2nd button click (release)
@@ -35,7 +35,7 @@ BLEService bleService("0f958eb9-b8bb-40e3-91b1-54281cabe755"); // https://www.uu
 BLECharacteristic rotateChar("06d66869-9fc1-4141-970d-dd5f6088723a", BLERead | BLENotify, quaternionMessageSize);
 BLECharacteristic startRotateChar("d9acf2e8-0f26-4707-94eb-091afc18e952", BLERead | BLEIndicate, startRotateMessageSize);
 BLECharacteristic velocityChar("4c3a0eec-d518-4e1e-a8c3-664111eb4d47", BLERead | BLENotify, velocityMessageSize);
-BLECharacteristic doubleClickChar("343056fa-14a3-4b67-9b05-37045461ebd2", BLERead | BLENotify, doubleClickMessageSize);
+BLECharacteristic doubleClickChar("343056fa-14a3-4b67-9b05-37045461ebd2", BLERead | BLEIndicate, dummyMessageSize);
 
 BLEDevice central;
 
@@ -112,6 +112,7 @@ void loop() {
       case 3: // release 2
         if (digitalRead(doubleClickButton)) {
           // SUCCESS: NOTIFY/SEND DATA
+          doubleClickChar.writeValue(dummyMessage, dummyMessageSize);
           buttonState = 0;
         }
       default:
@@ -135,7 +136,7 @@ void loop() {
         IMU.readGyroscope(gx, gy, gz);
         madgwick.updateIMU(-gx, -gy, -gz, ax, ay, az);
 
-        if (rotating) {
+        if (rotating && buttonState <= 1) {
             q[0] = madgwick.q0;
             q[1] = madgwick.q1;
             q[2] = madgwick.q2;
@@ -152,7 +153,7 @@ void loop() {
                 memcpy(quaternionMessage, q, quaternionMessageSize);
                 rotateChar.writeValue(quaternionMessage, quaternionMessageSize);
             }
-        } else if (translating) {
+        } else if (translating && buttonState <= 1) {
             vel[0] = madgwick.getRollRadians();
             vel[1] = madgwick.getPitchRadians();
             vel[0] -= 3.14159265f; // Arduino is upside down

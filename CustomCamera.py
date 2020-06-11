@@ -201,7 +201,7 @@ def run(context):
         startRotateSock = connectToSocket(5001)
         rotateSock = connectToSocket(5000)
         velocitySock = connectToSocket(5002)
-        # doublePressSock = connectToSocket(5003)
+        dblClickSock = connectToSocket(5003)
         print("connected")
 
         # TODO could use this to rotate around component center (would also have to rotate target):
@@ -222,7 +222,7 @@ def run(context):
             startRotateData = None
             quatData = None
             velocityData = None
-            # doublePressData = None
+            dblClickData = None
             if not shutdownData is None:
                 print("Stopping")
                 break
@@ -254,15 +254,23 @@ def run(context):
                     translate(disp, getBasisMatrix(0))
                     updateScreen()
             else:
-            #     doublePressData = getLatestData(doublePressSock, 1)
-            # if not doublePressData is None:
-            #     camera = view.camera
-            #     camera.viewOrientation = adsk.core.ViewOrientations.IsoTopRightViewOrientation
-            #     camera.isFitView = True
-            #     camera.isSmoothTransition = True
-            #     view.camera = camera
-            #     updateScreen()
-            # else:
+                dblClickData = getLatestData(dblClickSock, 1)
+            if not dblClickData is None:
+                camera = view.camera
+                camera.viewOrientation = adsk.core.ViewOrientations.IsoTopRightViewOrientation
+                view.camera = camera
+                updateScreen()
+
+                camera = view.camera
+                camera.isFitView = True
+                view.camera = camera
+                updateScreen()
+
+                camera = view.camera
+                camera.upVector = adsk.core.Vector3D.create(-1, 1, 1)
+                view.camera = camera
+                updateScreen()
+            else:
                 adsk.doEvents()
 
         # Test code

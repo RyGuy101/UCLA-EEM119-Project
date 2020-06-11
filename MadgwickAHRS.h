@@ -18,6 +18,8 @@
 #define MadgwickAHRS_h
 #include <math.h>
 
+#define sampleFreqDef   119.0f          // sample frequency in Hz
+
 //--------------------------------------------------------------------------------------------
 // Variable declaration
 class Madgwick{
