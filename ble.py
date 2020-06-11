@@ -10,9 +10,14 @@ ROTATE_CHAR_UUID       = '06d66869-9fc1-4141-970d-dd5f6088723a'
 START_ROTATE_CHAR_UUID = 'd9acf2e8-0f26-4707-94eb-091afc18e952'
 VELOCITY_CHAR          = '4c3a0eec-d518-4e1e-a8c3-664111eb4d47'
 
+shutdownWriter = None
 startRotateWriter = None
 rotateWriter = None
 velocityWriter = None
+
+def shutdownConnection(reader, writer):
+    global shutdownWriter
+    shutdownWriter = writer
 
 def startRotateConnection(reader, writer):
     print("Socket client connected")
@@ -62,6 +67,7 @@ async def run(loop):
         await client.start_notify(VELOCITY_CHAR, receivedVelocity)
         
         print("Waiting for Fusion 360 client...")
+        await asyncio.start_server(shutdownConnection,    'localhost', 4999, loop=loop)
         await asyncio.start_server(startRotateConnection, 'localhost', 5001, loop=loop)
         await asyncio.start_server(rotateConnection,      'localhost', 5000, loop=loop)
         await asyncio.start_server(velocityConnection,    'localhost', 5002, loop=loop)
@@ -75,6 +81,16 @@ async def run(loop):
                 await velocityWriter.drain()
             await asyncio.sleep(0.005, loop=loop)
 
+# notify client that the server will go down
+async def cleanup():
+    if not shutdownWriter is None:
+        shutdownWriter.write(b'a')
+        await shutdownWriter.drain()
+
 
 loop = asyncio.get_event_loop()
-loop.run_until_complete(run(loop))
+try:
+    loop.run_until_complete(run(loop))
+finally:
+    loop.run_until_complete(cleanup())
+    loop.close()

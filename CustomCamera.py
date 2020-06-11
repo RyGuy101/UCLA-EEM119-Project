@@ -197,6 +197,7 @@ def run(context):
         view = app.activeViewport
 
         print("connecting to socket...")
+        shutdownSock = connectToSocket(4999)
         startRotateSock = connectToSocket(5001)
         rotateSock = connectToSocket(5000)
         velocitySock = connectToSocket(5002)
@@ -208,7 +209,7 @@ def run(context):
         # comp = design.activeComponent
         # com = comp.getPhysicalProperties().centerOfMass
 
-        quaternionDataSize = 4*4; # quaternion is made of 4 floats
+        quaternionDataSize = 4*4 # quaternion is made of 4 floats
         startRotateDataSize = quaternionDataSize + 4 # quaternion plus yaw float value
         velocityDataSize = 4*2 # two floats (horizontal and vertical)
 
@@ -217,10 +218,16 @@ def run(context):
         rawVv = 0
 
         while True:
-            startRotateData = getLatestData(startRotateSock, startRotateDataSize)
+            shutdownData = getLatestData(shutdownSock, 1)
+            startRotateData = None
             quatData = None
             velocityData = None
             # doublePressData = None
+            if not shutdownData is None:
+                print("Stopping")
+                break
+            else:
+                startRotateData = getLatestData(startRotateSock, startRotateDataSize)
             if not startRotateData is None:
                 q = Quaternion(np.array(struct.unpack('4f', startRotateData[:quaternionDataSize])))
                 saveQuatReference(q)
@@ -257,11 +264,6 @@ def run(context):
             #     updateScreen()
             # else:
                 adsk.doEvents()
-                try:
-                    startRotateSock.send(b'a') # dummy message to check if server is alive
-                except:
-                    print("Lost connection with BLE process. Stopping...")
-                    break
 
         # Test code
         # saveQuatReference(Quaternion(1, 0, 0, 0))
