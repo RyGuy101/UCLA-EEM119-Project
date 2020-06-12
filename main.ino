@@ -2,8 +2,8 @@
 #include <ArduinoBLE.h>
 #include "MadgwickAHRS.h" // Library from https://github.com/arduino-libraries/MadgwickAHRS/
 
-#define ROTATE_BUTTON 8 // digital pin number
-#define TRANSLATE_BUTTON 2 // digital pin number
+#define ROTATE_BUTTON 3 // digital pin number. index finger
+#define TRANSLATE_BUTTON 2 // digital pin number. middle finger
 
 bool setupOkay = true;
 
@@ -160,7 +160,8 @@ void loop() {
             if (vel[0] < -3.14159265f) {
                 vel[0] += 2*3.14159265f;
             }
-            vel[1] += 0.349; // wrist angle is naturally around 20(?) degress - use this as the zero position
+            vel[1] += 0.349; // wrist angle is naturally around 20(?) degress pitch - use this as the zero position
+            vel[0] -= 0.349; // wrist angle is naturally around 20(?) degress roll - use this as the zero position
             memcpy(velocityMessage, vel, velocityMessageSize);
             velocityChar.writeValue(velocityMessage, velocityMessageSize);
         } else if (!endedTranslate) {
